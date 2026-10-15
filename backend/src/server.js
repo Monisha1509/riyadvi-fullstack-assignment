@@ -90,7 +90,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const port = Number(process.env.PORT) || 5000;
+const port = process.env.PORT;
 
 async function start() {
   if (process.env.MONGODB_URI) {
