@@ -104,7 +104,7 @@ async function start() {
     console.warn('MONGODB_URI is missing: API starts, but submissions cannot be stored.');
   }
 
-  app.listen(port, () => {
+  app.listen(port, '0.0.0.0', () => {
     console.log(`Riyadvi API listening on port ${port}`);
     console.log(`CORS allowed origins: ${origins.join(', ')}`);
     console.log(`app.get: /api/health and /health`);
