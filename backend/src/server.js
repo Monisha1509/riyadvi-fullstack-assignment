@@ -12,28 +12,35 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
 
-const origins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
-  .split(',')
-  .map((x) => x.trim().replace(/\/+$/, '').toLowerCase())
-  .filter(Boolean);
+// CLIENT_ORIGIN supports a comma-separated list of exact origins.
+// Example: http://localhost:5173,https://your-site.vercel.app
+const normalizeOrigin = (value) => value.trim().replace(/\/+$/, '').toLowerCase();
+const origins = [
+  ...new Set(
+    (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+      .split(',')
+      .map(normalizeOrigin)
+      .filter(Boolean)
+  ),
+];
 
 app.use(
   cors({
-    origin(origin, cb) {
-      const normalizedOrigin = origin?.replace(/\/+$/, '').toLowerCase();
+    origin(origin, callback) {
+      // Non-browser calls (e.g. direct health checks) do not send Origin.
+      if (!origin) return callback(null, true);
 
-      if (
-        !origin ||
-        origins.includes('*') ||
-        origins.includes(normalizedOrigin)
-      ) {
-        return cb(null, true);
-      }
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (origins.includes(normalizedOrigin)) return callback(null, true);
 
-      console.warn('CORS blocked origin:', origin);
-      console.warn('Allowed origins:', origins);
-      return cb(null, false);
+      console.warn(`CORS blocked origin: ${origin}`);
+      console.warn(`CORS allowed origins: ${origins.join(', ')}`);
+      // Deny this origin without turning the CORS decision into a server 500.
+      return callback(null, false);
     },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -49,12 +56,20 @@ app.use(
   })
 );
 
-app.get('/api/health', (req, res) => {
-  res.json({
+const healthHandler = (_req, res) => {
+  res.status(200).json({
+    service: 'riyadvi-api',
     status: 'ok',
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     commit: (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7),
   });
+};
+
+// Keep both paths: /api/health is the documented endpoint; /health is a simple alias.
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+app.get('/', (_req, res) => {
+  res.status(200).json({ service: 'riyadvi-api', status: 'running', health: '/api/health' });
 });
 
 app.use('/api', leadRoutes);
@@ -66,7 +81,6 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err.message);
-
   res.status(500).json({
     message:
       process.env.NODE_ENV === 'production'
@@ -86,14 +100,13 @@ async function start() {
       console.error('MongoDB connection failed:', err.message);
     }
   } else {
-    console.warn(
-      'MONGODB_URI is missing: API starts, but submissions cannot be stored.'
-    );
+    console.warn('MONGODB_URI is missing: API starts, but submissions cannot be stored.');
   }
 
   app.listen(port, () => {
     console.log(`Riyadvi API listening on port ${port}`);
     console.log(`CORS allowed origins: ${origins.join(', ')}`);
+    console.log(`app.get: /api/health and /health`);
   });
 }
 
