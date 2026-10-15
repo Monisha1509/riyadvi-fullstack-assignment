@@ -68,6 +68,7 @@ const healthHandler = (_req, res) => {
 // Keep both paths: /api/health is the documented endpoint; /health is a simple alias.
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
+app.get('/debug-check', (_req, res) => res.send('NEW CODE IS RUNNING'));
 app.get('/', (_req, res) => {
   res.status(200).json({ service: 'riyadvi-api', status: 'running', health: '/api/health' });
 });
